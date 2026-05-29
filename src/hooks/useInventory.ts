@@ -6,15 +6,29 @@ import {
   getState,
   importProducts,
   setLotStatus,
+  upsertCategory,
   upsertLot,
+  upsertLocation,
   upsertProduct,
+  upsertProductType,
+  upsertSubcategory,
   upsertSupplier,
   upsertTag
 } from "../db/supabaseStorage";
 import { Organization } from "../db/supabaseStorage";
-import { InventoryState, Lot, Movement, Product, Supplier, Tag } from "../types";
+import { Category, InventoryLocation, InventoryState, Lot, Movement, Product, ProductTypeCatalog, Subcategory, Supplier, Tag } from "../types";
 
-const emptyState: InventoryState = { products: [], lots: [], movements: [], suppliers: [], tags: [] };
+const emptyState: InventoryState = {
+  products: [],
+  lots: [],
+  movements: [],
+  suppliers: [],
+  tags: [],
+  locations: [],
+  productTypes: [],
+  categories: [],
+  subcategories: []
+};
 
 export const useInventory = (enabled: boolean) => {
   const [state, setState] = useState(emptyState);
@@ -72,6 +86,22 @@ export const useInventory = (enabled: boolean) => {
       },
       saveTag: async (tag: Tag) => {
         await upsertTag(organizationId, tag);
+        await refresh();
+      },
+      saveLocation: async (location: InventoryLocation) => {
+        await upsertLocation(organizationId, location);
+        await refresh();
+      },
+      saveProductType: async (productType: ProductTypeCatalog) => {
+        await upsertProductType(organizationId, productType);
+        await refresh();
+      },
+      saveCategory: async (category: Category) => {
+        await upsertCategory(organizationId, category);
+        await refresh();
+      },
+      saveSubcategory: async (subcategory: Subcategory) => {
+        await upsertSubcategory(organizationId, subcategory);
         await refresh();
       },
       registerMovement: async (movement: Partial<Movement> & Pick<Movement, "productId" | "type" | "quantity">) => {

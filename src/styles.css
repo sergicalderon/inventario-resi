@@ -410,6 +410,31 @@ td span {
   gap: 12px;
 }
 
+.tabs {
+  background: #ffffff;
+  border: 1px solid #dfe7ef;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+}
+
+.tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #506173;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.tabs button.active,
+.tabs button:hover {
+  background: #e8f3f1;
+  color: #135d63;
+}
+
 .filters {
   grid-template-columns: minmax(280px, 1.5fr) repeat(5, minmax(150px, 1fr));
 }

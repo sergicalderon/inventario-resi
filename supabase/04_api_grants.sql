@@ -5,6 +5,10 @@ grant select on public.organization_members to authenticated;
 
 grant select, insert, update on public.suppliers to authenticated;
 grant select, insert, update on public.tags to authenticated;
+grant select, insert, update on public.locations to authenticated;
+grant select, insert, update on public.product_types to authenticated;
+grant select, insert, update on public.categories to authenticated;
+grant select, insert, update on public.subcategories to authenticated;
 grant select, insert, update on public.products to authenticated;
 grant select, insert, delete on public.product_tags to authenticated;
 grant select, insert, update on public.lots to authenticated;

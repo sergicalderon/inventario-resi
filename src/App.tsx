@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import { supabase } from "./lib/supabase";
 import { useAuth } from "./hooks/useAuth";
 import { useInventory } from "./hooks/useInventory";
+import { Catalogs } from "./views/Catalogs";
 import { Dashboard } from "./views/Dashboard";
 import { ImportExport } from "./views/ImportExport";
 import { Lots } from "./views/Lots";
@@ -42,6 +43,15 @@ export default function App() {
         {view === "movements" && <Movements state={state} onRegister={actions.registerMovement} />}
         {view === "suppliers" && <Suppliers state={state} onSave={actions.saveSupplier} />}
         {view === "tags" && <Tags state={state} onSave={actions.saveTag} />}
+        {view === "catalogs" && (
+          <Catalogs
+            state={state}
+            onSaveLocation={actions.saveLocation}
+            onSaveProductType={actions.saveProductType}
+            onSaveCategory={actions.saveCategory}
+            onSaveSubcategory={actions.saveSubcategory}
+          />
+        )}
         {view === "io" && <ImportExport state={state} onImport={actions.importProductRows} />}
       </main>
     </div>

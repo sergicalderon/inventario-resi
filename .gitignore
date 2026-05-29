@@ -6,9 +6,11 @@ dist
 .env.*.local
 public/sql-wasm-browser.wasm
 .vercel
+.vercel-home
 .vercel-data
 .vercel-cache
 .vercel-config
+Library
 dist/.vercel
 .gh-config
 .tools

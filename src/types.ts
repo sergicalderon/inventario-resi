@@ -17,15 +17,38 @@ export type Tag = {
   name: string;
 };
 
+export type CatalogBase = {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+};
+
+export type InventoryLocation = CatalogBase;
+
+export type ProductTypeCatalog = CatalogBase;
+
+export type Category = CatalogBase & {
+  productTypeId: string;
+};
+
+export type Subcategory = CatalogBase & {
+  categoryId: string;
+};
+
 export type Product = {
   id: string;
   name: string;
   type: ProductType;
   category: string;
   subcategory: string;
+  productTypeId: string;
+  categoryId: string;
+  subcategoryId: string;
   unit: UnitType;
   minStock: number;
   mainLocation: string;
+  mainLocationId: string;
   mainSupplierId: string;
   tags: string[];
   notes: string;
@@ -62,6 +85,10 @@ export type InventoryState = {
   movements: Movement[];
   suppliers: Supplier[];
   tags: Tag[];
+  locations: InventoryLocation[];
+  productTypes: ProductTypeCatalog[];
+  categories: Category[];
+  subcategories: Subcategory[];
 };
 
 export type ProductForm = Omit<Product, "id">;

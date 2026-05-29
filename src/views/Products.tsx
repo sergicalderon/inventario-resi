@@ -4,26 +4,39 @@ import { Modal } from "../components/Modal";
 import { InventoryState, Product, ProductType, UnitType } from "../types";
 import { productStock, supplierName, tagNames } from "../utils/inventory";
 
-const productTypes: ProductType[] = ["fármaco", "apósito", "fungible", "higiene", "nutrición", "otro"];
 const unitTypes: UnitType[] = ["unidad", "caja", "blíster", "ampolla", "sobre", "ml", "otro"];
+const legacyProductTypes: ProductType[] = ["fármaco", "apósito", "fungible", "higiene", "nutrición", "otro"];
+
+const normalize = (value: string) => value.trim().toLocaleLowerCase("es");
+const toLegacyProductType = (name: string): ProductType => {
+  const normalized = normalize(name);
+  return legacyProductTypes.includes(normalized as ProductType) ? (normalized as ProductType) : "otro";
+};
+
+const catalogName = <T extends { id: string; name: string }>(items: T[], id: string, fallback = "") => items.find((item) => item.id === id)?.name || fallback;
 
 export const Products = ({ state, onSave }: { state: InventoryState; onSave: (product: Product) => void }) => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ type: "", category: "", supplier: "", location: "", tag: "" });
 
-  const categories = [...new Set(state.products.map((product) => product.category).filter(Boolean))];
-  const locations = [...new Set(state.products.map((product) => product.mainLocation).filter(Boolean))];
   const filtered = useMemo(
     () =>
       state.products.filter((product) => {
-        const text = `${product.name} ${product.category} ${product.subcategory} ${product.notes}`.toLowerCase();
+        const typeName = catalogName(state.productTypes, product.productTypeId, product.type);
+        const categoryName = catalogName(state.categories, product.categoryId, product.category);
+        const subcategoryName = catalogName(state.subcategories, product.subcategoryId, product.subcategory);
+        const locationName = catalogName(state.locations, product.mainLocationId, product.mainLocation);
+        const filterTypeName = catalogName(state.productTypes, filters.type);
+        const filterCategoryName = catalogName(state.categories, filters.category);
+        const filterLocationName = catalogName(state.locations, filters.location);
+        const text = `${product.name} ${typeName} ${categoryName} ${subcategoryName} ${locationName} ${product.notes}`.toLowerCase();
         return (
           text.includes(query.toLowerCase()) &&
-          (!filters.type || product.type === filters.type) &&
-          (!filters.category || product.category === filters.category) &&
+          (!filters.type || product.productTypeId === filters.type || (!product.productTypeId && normalize(product.type) === normalize(filterTypeName))) &&
+          (!filters.category || product.categoryId === filters.category || (!product.categoryId && normalize(product.category) === normalize(filterCategoryName))) &&
           (!filters.supplier || product.mainSupplierId === filters.supplier) &&
-          (!filters.location || product.mainLocation === filters.location) &&
+          (!filters.location || product.mainLocationId === filters.location || (!product.mainLocationId && normalize(product.mainLocation) === normalize(filterLocationName))) &&
           (!filters.tag || product.tags.includes(filters.tag))
         );
       }),
@@ -48,11 +61,11 @@ export const Products = ({ state, onSave }: { state: InventoryState; onSave: (pr
         </label>
         <select value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}>
           <option value="">Tipo</option>
-          {productTypes.map((type) => <option key={type}>{type}</option>)}
+          {state.productTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}
         </select>
         <select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}>
           <option value="">Categoría</option>
-          {categories.map((category) => <option key={category}>{category}</option>)}
+          {state.categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
         </select>
         <select value={filters.supplier} onChange={(event) => setFilters({ ...filters, supplier: event.target.value })}>
           <option value="">Proveedor</option>
@@ -60,7 +73,7 @@ export const Products = ({ state, onSave }: { state: InventoryState; onSave: (pr
         </select>
         <select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}>
           <option value="">Ubicación</option>
-          {locations.map((location) => <option key={location}>{location}</option>)}
+          {state.locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
         </select>
         <select value={filters.tag} onChange={(event) => setFilters({ ...filters, tag: event.target.value })}>
           <option value="">Etiqueta</option>
@@ -89,12 +102,12 @@ export const Products = ({ state, onSave }: { state: InventoryState; onSave: (pr
                 const stock = productStock(product.id, state.lots);
                 return (
                   <tr key={product.id} className={!product.active ? "inactive-row" : ""}>
-                    <td><strong>{product.name}</strong><span>{product.subcategory}</span></td>
-                    <td>{product.type}</td>
-                    <td>{product.category}</td>
+                    <td><strong>{product.name}</strong><span>{catalogName(state.subcategories, product.subcategoryId, product.subcategory)}</span></td>
+                    <td>{catalogName(state.productTypes, product.productTypeId, product.type)}</td>
+                    <td>{catalogName(state.categories, product.categoryId, product.category)}</td>
                     <td><span className={`pill ${stock <= product.minStock ? "danger" : ""}`}>{stock}</span></td>
                     <td>{product.minStock}</td>
-                    <td>{product.mainLocation || "Sin ubicación"}</td>
+                    <td>{catalogName(state.locations, product.mainLocationId, product.mainLocation) || "Sin ubicación"}</td>
                     <td>{product.mainSupplierId ? supplierName(state, product.mainSupplierId) : "Sin proveedor"}</td>
                     <td className="tags-cell">{tagNames(state, product) || "Sin etiquetas"}</td>
                     <td><span className="pill">{product.active ? "activo" : "inactivo"}</span></td>
@@ -127,9 +140,13 @@ const blankProduct = (): Product => ({
   type: "fármaco",
   category: "",
   subcategory: "",
+  productTypeId: "",
+  categoryId: "",
+  subcategoryId: "",
   unit: "unidad",
   minStock: 0,
   mainLocation: "",
+  mainLocationId: "",
   mainSupplierId: "",
   tags: [],
   notes: "",
@@ -139,17 +156,49 @@ const blankProduct = (): Product => ({
 const ProductModal = ({ product, state, onClose, onSave }: { product: Product; state: InventoryState; onClose: () => void; onSave: (product: Product) => void }) => {
   const [form, setForm] = useState(product);
   const toggleTag = (tagId: string) => setForm({ ...form, tags: form.tags.includes(tagId) ? form.tags.filter((id) => id !== tagId) : [...form.tags, tagId] });
+  const selectableProductTypes = state.productTypes.filter((type) => type.active || type.id === form.productTypeId);
+  const selectableCategories = state.categories.filter((category) => (!form.productTypeId || category.productTypeId === form.productTypeId) && (category.active || category.id === form.categoryId));
+  const selectableSubcategories = state.subcategories.filter((subcategory) => subcategory.categoryId === form.categoryId && (subcategory.active || subcategory.id === form.subcategoryId));
+  const selectableLocations = state.locations.filter((location) => location.active || location.id === form.mainLocationId);
+
+  const updateProductType = (productTypeId: string) => {
+    const productType = state.productTypes.find((item) => item.id === productTypeId);
+    setForm({
+      ...form,
+      productTypeId,
+      type: toLegacyProductType(productType?.name || ""),
+      categoryId: "",
+      category: "",
+      subcategoryId: "",
+      subcategory: ""
+    });
+  };
+
+  const updateCategory = (categoryId: string) => {
+    const category = state.categories.find((item) => item.id === categoryId);
+    setForm({ ...form, categoryId, category: category?.name || "", subcategoryId: "", subcategory: "" });
+  };
+
+  const updateSubcategory = (subcategoryId: string) => {
+    const subcategory = state.subcategories.find((item) => item.id === subcategoryId);
+    setForm({ ...form, subcategoryId, subcategory: subcategory?.name || "" });
+  };
+
+  const updateLocation = (mainLocationId: string) => {
+    const location = state.locations.find((item) => item.id === mainLocationId);
+    setForm({ ...form, mainLocationId, mainLocation: location?.name || "" });
+  };
 
   return (
     <Modal title="Producto" onClose={onClose}>
       <form className="form-grid" onSubmit={(event) => { event.preventDefault(); onSave(form); }}>
         <label>Nombre<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-        <label>Tipo<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as ProductType })}>{productTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-        <label>Categoría<input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
-        <label>Subcategoría<input value={form.subcategory} onChange={(event) => setForm({ ...form, subcategory: event.target.value })} /></label>
+        <label>Tipo<select required value={form.productTypeId} onChange={(event) => updateProductType(event.target.value)}><option value="">Seleccionar tipo</option>{selectableProductTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</select></label>
+        <label>Categoría<select value={form.categoryId} onChange={(event) => updateCategory(event.target.value)}><option value="">Sin categoría</option>{selectableCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+        <label>Subcategoría<select value={form.subcategoryId} onChange={(event) => updateSubcategory(event.target.value)} disabled={!form.categoryId}><option value="">Sin subcategoría</option>{selectableSubcategories.map((subcategory) => <option value={subcategory.id} key={subcategory.id}>{subcategory.name}</option>)}</select></label>
         <label>Unidad<select value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value as UnitType })}>{unitTypes.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
         <label>Stock mínimo<input type="number" min="0" value={form.minStock} onChange={(event) => setForm({ ...form, minStock: Number(event.target.value) })} /></label>
-        <label>Ubicación principal<input value={form.mainLocation} onChange={(event) => setForm({ ...form, mainLocation: event.target.value })} /></label>
+        <label>Ubicación principal<select value={form.mainLocationId} onChange={(event) => updateLocation(event.target.value)}><option value="">Sin ubicación</option>{selectableLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>
         <label>Proveedor principal<select value={form.mainSupplierId} onChange={(event) => setForm({ ...form, mainSupplierId: event.target.value })}><option value="">Sin proveedor</option>{state.suppliers.map((supplier) => <option value={supplier.id} key={supplier.id}>{supplier.name}</option>)}</select></label>
         <label className="wide">Observaciones<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
         <div className="wide checkbox-list">

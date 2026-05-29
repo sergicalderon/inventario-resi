@@ -11,15 +11,18 @@ supabase/01_tables.sql
 supabase/02_functions.sql
 supabase/03_security_policies.sql
 supabase/04_api_grants.sql
+supabase/05_catalogs_migration.sql
 ```
 
 Esto crea:
 
-- tablas de residencia, usuarios, productos, lotes, movimientos, proveedores y etiquetas,
+- tablas de residencia, usuarios, productos, lotes, movimientos, proveedores, etiquetas y catálogos maestros,
 - seguridad RLS,
 - políticas para que solo usuarios autenticados de la residencia vean los datos,
 - función para crear la primera residencia,
 - función transaccional para registrar movimientos y actualizar stock.
+
+Si el proyecto ya tenía productos creados antes de los catálogos maestros, ejecuta `supabase/05_catalogs_migration.sql` una vez para crear ubicaciones, tipos, categorías y subcategorías a partir de los textos existentes sin borrar columnas antiguas.
 
 ## 2. Crear usuarios privados
 

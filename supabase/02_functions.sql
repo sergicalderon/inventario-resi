@@ -59,6 +59,16 @@ begin
     (new_org.id, 'caducidad próxima'),
     (new_org.id, 'proveedor habitual');
 
+  insert into public.product_types(organization_id, name)
+  values
+    (new_org.id, 'Fármaco'),
+    (new_org.id, 'Apósito'),
+    (new_org.id, 'Fungible'),
+    (new_org.id, 'Higiene'),
+    (new_org.id, 'Nutrición'),
+    (new_org.id, 'Otro')
+  on conflict do nothing;
+
   return new_org;
 end;
 $fn$;

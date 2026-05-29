@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { InventoryState, Lot, Movement, Product, Supplier, Tag } from "../types";
+import { Category, InventoryLocation, InventoryState, Lot, Movement, Product, ProductType, ProductTypeCatalog, Subcategory, Supplier, Tag } from "../types";
 import { todayIso } from "../utils/dates";
 
 export type Organization = {
@@ -13,12 +13,31 @@ type ProductRow = {
   type: Product["type"];
   category: string;
   subcategory: string;
+  product_type_id: string | null;
+  category_id: string | null;
+  subcategory_id: string | null;
   unit: Product["unit"];
   min_stock: number;
   main_location: string;
+  main_location_id: string | null;
   main_supplier_id: string | null;
   notes: string;
   active: boolean;
+};
+
+type CatalogRow = {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+};
+
+type CategoryRow = CatalogRow & {
+  product_type_id: string | null;
+};
+
+type SubcategoryRow = CatalogRow & {
+  category_id: string | null;
 };
 
 type ProductTagRow = {
@@ -52,6 +71,17 @@ type MovementRow = {
 
 const cleanId = (value: string) => value || crypto.randomUUID();
 const nullable = (value: string) => value || null;
+const cleanName = (value: string) => value.trim();
+const normalize = (value: string) => cleanName(value).toLocaleLowerCase("es");
+
+const legacyProductTypes: ProductType[] = ["fármaco", "apósito", "fungible", "higiene", "nutrición", "otro"];
+
+const toLegacyProductType = (name: string): ProductType => {
+  const normalized = normalize(name);
+  return legacyProductTypes.includes(normalized as ProductType) ? (normalized as ProductType) : "otro";
+};
+
+const matchesName = <T extends { name: string }>(rows: T[], name: string) => rows.find((row) => normalize(row.name) === normalize(name));
 
 export const getOrganizations = async () => {
   const { data, error } = await supabase.from("organizations").select("id, name").order("created_at", { ascending: true });
@@ -66,12 +96,27 @@ export const createOrganization = async (name: string) => {
 };
 
 export const getState = async (organizationId: string): Promise<InventoryState> => {
-  const [suppliersResult, tagsResult, productsResult, productTagsResult, lotsResult, movementsResult] = await Promise.all([
+  const [
+    suppliersResult,
+    tagsResult,
+    locationsResult,
+    productTypesResult,
+    categoriesResult,
+    subcategoriesResult,
+    productsResult,
+    productTagsResult,
+    lotsResult,
+    movementsResult
+  ] = await Promise.all([
     supabase.from("suppliers").select("id, name, contact, phone, email, notes").eq("organization_id", organizationId).order("name"),
     supabase.from("tags").select("id, name").eq("organization_id", organizationId).order("name"),
+    supabase.from("locations").select("id, name, description, active").eq("organization_id", organizationId).order("active", { ascending: false }).order("name"),
+    supabase.from("product_types").select("id, name, description, active").eq("organization_id", organizationId).order("active", { ascending: false }).order("name"),
+    supabase.from("categories").select("id, name, description, active, product_type_id").eq("organization_id", organizationId).order("active", { ascending: false }).order("name"),
+    supabase.from("subcategories").select("id, name, description, active, category_id").eq("organization_id", organizationId).order("active", { ascending: false }).order("name"),
     supabase
       .from("products")
-      .select("id, name, type, category, subcategory, unit, min_stock, main_location, main_supplier_id, notes, active")
+      .select("id, name, type, category, subcategory, product_type_id, category_id, subcategory_id, unit, min_stock, main_location, main_location_id, main_supplier_id, notes, active")
       .eq("organization_id", organizationId)
       .order("active", { ascending: false })
       .order("name"),
@@ -89,7 +134,17 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
       .limit(500)
   ]);
 
-  const error = suppliersResult.error || tagsResult.error || productsResult.error || productTagsResult.error || lotsResult.error || movementsResult.error;
+  const error =
+    suppliersResult.error ||
+    tagsResult.error ||
+    locationsResult.error ||
+    productTypesResult.error ||
+    categoriesResult.error ||
+    subcategoriesResult.error ||
+    productsResult.error ||
+    productTagsResult.error ||
+    lotsResult.error ||
+    movementsResult.error;
   if (error) throw error;
 
   const productTags = (productTagsResult.data || []) as ProductTagRow[];
@@ -99,9 +154,13 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
     type: product.type,
     category: product.category,
     subcategory: product.subcategory,
+    productTypeId: product.product_type_id || "",
+    categoryId: product.category_id || "",
+    subcategoryId: product.subcategory_id || "",
     unit: product.unit,
     minStock: product.min_stock,
     mainLocation: product.main_location,
+    mainLocationId: product.main_location_id || "",
     mainSupplierId: product.main_supplier_id || "",
     notes: product.notes,
     active: product.active,
@@ -135,6 +194,22 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
   return {
     suppliers: (suppliersResult.data || []) as Supplier[],
     tags: (tagsResult.data || []) as Tag[],
+    locations: ((locationsResult.data || []) as CatalogRow[]).map((location) => ({ ...location })),
+    productTypes: ((productTypesResult.data || []) as CatalogRow[]).map((productType) => ({ ...productType })),
+    categories: ((categoriesResult.data || []) as CategoryRow[]).map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      active: category.active,
+      productTypeId: category.product_type_id || ""
+    })),
+    subcategories: ((subcategoriesResult.data || []) as SubcategoryRow[]).map((subcategory) => ({
+      id: subcategory.id,
+      name: subcategory.name,
+      description: subcategory.description,
+      active: subcategory.active,
+      categoryId: subcategory.category_id || ""
+    })),
     products,
     lots,
     movements
@@ -163,18 +238,123 @@ export const upsertTag = async (organizationId: string, tag: Tag) => {
   if (error) throw error;
 };
 
+export const upsertLocation = async (organizationId: string, location: InventoryLocation) => {
+  const { error } = await supabase.from("locations").upsert({
+    id: cleanId(location.id),
+    organization_id: organizationId,
+    name: cleanName(location.name),
+    description: location.description,
+    active: location.active
+  });
+  if (error) throw error;
+};
+
+export const upsertProductType = async (organizationId: string, productType: ProductTypeCatalog) => {
+  const { error } = await supabase.from("product_types").upsert({
+    id: cleanId(productType.id),
+    organization_id: organizationId,
+    name: cleanName(productType.name),
+    description: productType.description,
+    active: productType.active
+  });
+  if (error) throw error;
+};
+
+export const upsertCategory = async (organizationId: string, category: Category) => {
+  const { error } = await supabase.from("categories").upsert({
+    id: cleanId(category.id),
+    organization_id: organizationId,
+    product_type_id: nullable(category.productTypeId),
+    name: cleanName(category.name),
+    description: category.description,
+    active: category.active
+  });
+  if (error) throw error;
+};
+
+export const upsertSubcategory = async (organizationId: string, subcategory: Subcategory) => {
+  const { error } = await supabase.from("subcategories").upsert({
+    id: cleanId(subcategory.id),
+    organization_id: organizationId,
+    category_id: nullable(subcategory.categoryId),
+    name: cleanName(subcategory.name),
+    description: subcategory.description,
+    active: subcategory.active
+  });
+  if (error) throw error;
+};
+
+const ensureLocationId = async (organizationId: string, locationId: string, locationName: string) => {
+  if (locationId || !cleanName(locationName)) return locationId;
+  const { data, error } = await supabase.from("locations").select("id, name").eq("organization_id", organizationId).ilike("name", cleanName(locationName));
+  if (error) throw error;
+  const existing = matchesName((data || []) as Pick<InventoryLocation, "id" | "name">[], locationName);
+  if (existing) return existing.id;
+  const id = crypto.randomUUID();
+  await upsertLocation(organizationId, { id, name: cleanName(locationName), description: "", active: true });
+  return id;
+};
+
+const ensureProductTypeId = async (organizationId: string, productTypeId: string, typeName: string) => {
+  if (productTypeId) return productTypeId;
+  const name = cleanName(typeName) || "Otro";
+  const { data, error } = await supabase.from("product_types").select("id, name").eq("organization_id", organizationId).ilike("name", name);
+  if (error) throw error;
+  const existing = matchesName((data || []) as Pick<ProductTypeCatalog, "id" | "name">[], name);
+  if (existing) return existing.id;
+  const id = crypto.randomUUID();
+  await upsertProductType(organizationId, { id, name, description: "", active: true });
+  return id;
+};
+
+const ensureCategoryId = async (organizationId: string, categoryId: string, categoryName: string, productTypeId: string) => {
+  if (categoryId || !cleanName(categoryName)) return categoryId;
+  const query = supabase.from("categories").select("id, name").eq("organization_id", organizationId).ilike("name", cleanName(categoryName));
+  const { data, error } = productTypeId ? await query.eq("product_type_id", productTypeId) : await query.is("product_type_id", null);
+  if (error) throw error;
+  const existing = matchesName((data || []) as Pick<Category, "id" | "name">[], categoryName);
+  if (existing) return existing.id;
+  const id = crypto.randomUUID();
+  await upsertCategory(organizationId, { id, name: cleanName(categoryName), description: "", active: true, productTypeId });
+  return id;
+};
+
+const ensureSubcategoryId = async (organizationId: string, subcategoryId: string, subcategoryName: string, categoryId: string) => {
+  if (subcategoryId || !cleanName(subcategoryName) || !categoryId) return subcategoryId;
+  const { data, error } = await supabase
+    .from("subcategories")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("category_id", categoryId)
+    .ilike("name", cleanName(subcategoryName));
+  if (error) throw error;
+  const existing = matchesName((data || []) as Pick<Subcategory, "id" | "name">[], subcategoryName);
+  if (existing) return existing.id;
+  const id = crypto.randomUUID();
+  await upsertSubcategory(organizationId, { id, name: cleanName(subcategoryName), description: "", active: true, categoryId });
+  return id;
+};
+
 export const upsertProduct = async (organizationId: string, product: Product) => {
   const productId = cleanId(product.id);
+  const productTypeId = await ensureProductTypeId(organizationId, product.productTypeId, product.type);
+  const categoryId = await ensureCategoryId(organizationId, product.categoryId, product.category, productTypeId);
+  const subcategoryId = await ensureSubcategoryId(organizationId, product.subcategoryId, product.subcategory, categoryId);
+  const mainLocationId = await ensureLocationId(organizationId, product.mainLocationId, product.mainLocation);
   const { error: productError } = await supabase.from("products").upsert({
     id: productId,
     organization_id: organizationId,
     name: product.name,
-    type: product.type,
+    type: toLegacyProductType(product.type),
     category: product.category,
     subcategory: product.subcategory,
+    product_type_id: nullable(productTypeId),
+    category_id: nullable(categoryId),
+    subcategory_id: nullable(subcategoryId),
     unit: product.unit,
     min_stock: product.minStock,
     main_location: product.mainLocation,
+    main_location_id: nullable(mainLocationId),
     main_supplier_id: nullable(product.mainSupplierId),
     notes: product.notes,
     active: product.active

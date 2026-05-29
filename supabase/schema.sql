@@ -34,6 +34,48 @@ create table if not exists public.tags (
   unique (organization_id, name)
 );
 
+create table if not exists public.locations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.product_types (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  product_type_id uuid references public.product_types(id) on delete set null,
+  name text not null,
+  description text not null default '',
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.subcategories (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  category_id uuid not null references public.categories(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -41,9 +83,13 @@ create table if not exists public.products (
   type text not null check (type in ('fármaco', 'apósito', 'fungible', 'higiene', 'nutrición', 'otro')),
   category text not null default '',
   subcategory text not null default '',
+  product_type_id uuid references public.product_types(id) on delete set null,
+  category_id uuid references public.categories(id) on delete set null,
+  subcategory_id uuid references public.subcategories(id) on delete set null,
   unit text not null check (unit in ('unidad', 'caja', 'blíster', 'ampolla', 'sobre', 'ml', 'otro')),
   min_stock integer not null default 0 check (min_stock >= 0),
   main_location text not null default '',
+  main_location_id uuid references public.locations(id) on delete set null,
   main_supplier_id uuid references public.suppliers(id) on delete set null,
   notes text not null default '',
   active boolean not null default true,
@@ -87,20 +133,41 @@ create table if not exists public.movements (
   created_at timestamptz not null default now()
 );
 
+create index if not exists suppliers_org_idx on public.suppliers(organization_id);
+create index if not exists tags_org_idx on public.tags(organization_id);
+create index if not exists locations_org_idx on public.locations(organization_id);
+create index if not exists product_types_org_idx on public.product_types(organization_id);
+create index if not exists categories_org_idx on public.categories(organization_id);
+create index if not exists categories_product_type_idx on public.categories(product_type_id);
+create index if not exists subcategories_org_idx on public.subcategories(organization_id);
+create index if not exists subcategories_category_idx on public.subcategories(category_id);
+create index if not exists products_org_idx on public.products(organization_id);
+create index if not exists products_main_location_idx on public.products(main_location_id);
+create index if not exists products_product_type_idx on public.products(product_type_id);
+create index if not exists products_category_idx on public.products(category_id);
+create index if not exists products_subcategory_idx on public.products(subcategory_id);
+create index if not exists lots_product_idx on public.lots(product_id);
+create index if not exists lots_expiry_idx on public.lots(expires_at);
+create index if not exists movements_org_date_idx on public.movements(organization_id, date desc);
+
+create unique index if not exists locations_org_name_unique on public.locations(organization_id, lower(name));
+create unique index if not exists product_types_org_name_unique on public.product_types(organization_id, lower(name));
+create unique index if not exists categories_org_type_name_unique on public.categories(organization_id, coalesce(product_type_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+create unique index if not exists subcategories_category_name_unique on public.subcategories(category_id, lower(name));
 create or replace function public.is_org_member(target_org uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = public
-as $$
+as $fn$
   select exists (
     select 1
     from public.organization_members
     where organization_id = target_org
       and user_id = auth.uid()
   );
-$$;
+$fn$;
 
 create or replace function public.can_write_org(target_org uuid)
 returns boolean
@@ -108,7 +175,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $fn$
   select exists (
     select 1
     from public.organization_members
@@ -116,14 +183,14 @@ as $$
       and user_id = auth.uid()
       and role in ('admin', 'staff')
   );
-$$;
+$fn$;
 
 create or replace function public.create_organization(org_name text)
 returns public.organizations
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   new_org public.organizations;
 begin
@@ -148,9 +215,19 @@ begin
     (new_org.id, 'caducidad próxima'),
     (new_org.id, 'proveedor habitual');
 
+  insert into public.product_types(organization_id, name)
+  values
+    (new_org.id, 'Fármaco'),
+    (new_org.id, 'Apósito'),
+    (new_org.id, 'Fungible'),
+    (new_org.id, 'Higiene'),
+    (new_org.id, 'Nutrición'),
+    (new_org.id, 'Otro')
+  on conflict do nothing;
+
   return new_org;
 end;
-$$;
+$fn$;
 
 create or replace function public.register_inventory_movement(
   target_organization_id uuid,
@@ -167,7 +244,7 @@ returns public.movements
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   new_movement public.movements;
   delta integer;
@@ -241,69 +318,163 @@ begin
 
   return new_movement;
 end;
-$$;
+$fn$;
 
+grant execute on function public.create_organization(text) to authenticated;
+grant execute on function public.register_inventory_movement(uuid, uuid, uuid, text, integer, text, text, text, date) to authenticated;
 alter table public.organizations enable row level security;
 alter table public.organization_members enable row level security;
 alter table public.suppliers enable row level security;
 alter table public.tags enable row level security;
+alter table public.locations enable row level security;
+alter table public.product_types enable row level security;
+alter table public.categories enable row level security;
+alter table public.subcategories enable row level security;
 alter table public.products enable row level security;
 alter table public.product_tags enable row level security;
 alter table public.lots enable row level security;
 alter table public.movements enable row level security;
 
+drop policy if exists "members can read organizations" on public.organizations;
 create policy "members can read organizations" on public.organizations
 for select to authenticated using (public.is_org_member(id));
 
+drop policy if exists "members can read memberships" on public.organization_members;
 create policy "members can read memberships" on public.organization_members
 for select to authenticated using (public.is_org_member(organization_id));
 
+drop policy if exists "members can read suppliers" on public.suppliers;
 create policy "members can read suppliers" on public.suppliers
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert suppliers" on public.suppliers;
 create policy "writers can insert suppliers" on public.suppliers
 for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update suppliers" on public.suppliers;
 create policy "writers can update suppliers" on public.suppliers
 for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
 
+drop policy if exists "members can read tags" on public.tags;
 create policy "members can read tags" on public.tags
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert tags" on public.tags;
 create policy "writers can insert tags" on public.tags
 for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update tags" on public.tags;
 create policy "writers can update tags" on public.tags
 for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
 
+drop policy if exists "members can read locations" on public.locations;
+create policy "members can read locations" on public.locations
+for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert locations" on public.locations;
+create policy "writers can insert locations" on public.locations
+for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update locations" on public.locations;
+create policy "writers can update locations" on public.locations
+for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
+
+drop policy if exists "members can read product types" on public.product_types;
+create policy "members can read product types" on public.product_types
+for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert product types" on public.product_types;
+create policy "writers can insert product types" on public.product_types
+for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update product types" on public.product_types;
+create policy "writers can update product types" on public.product_types
+for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
+
+drop policy if exists "members can read categories" on public.categories;
+create policy "members can read categories" on public.categories
+for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert categories" on public.categories;
+create policy "writers can insert categories" on public.categories
+for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update categories" on public.categories;
+create policy "writers can update categories" on public.categories
+for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
+
+drop policy if exists "members can read subcategories" on public.subcategories;
+create policy "members can read subcategories" on public.subcategories
+for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert subcategories" on public.subcategories;
+create policy "writers can insert subcategories" on public.subcategories
+for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update subcategories" on public.subcategories;
+create policy "writers can update subcategories" on public.subcategories
+for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
+
+drop policy if exists "members can read products" on public.products;
 create policy "members can read products" on public.products
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert products" on public.products;
 create policy "writers can insert products" on public.products
 for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update products" on public.products;
 create policy "writers can update products" on public.products
 for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
 
+drop policy if exists "members can read product tags" on public.product_tags;
 create policy "members can read product tags" on public.product_tags
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert product tags" on public.product_tags;
 create policy "writers can insert product tags" on public.product_tags
 for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can delete product tags" on public.product_tags;
 create policy "writers can delete product tags" on public.product_tags
 for delete to authenticated using (public.can_write_org(organization_id));
 
+drop policy if exists "members can read lots" on public.lots;
 create policy "members can read lots" on public.lots
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert lots" on public.lots;
 create policy "writers can insert lots" on public.lots
 for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "writers can update lots" on public.lots;
 create policy "writers can update lots" on public.lots
 for update to authenticated using (public.can_write_org(organization_id)) with check (public.can_write_org(organization_id));
 
+drop policy if exists "members can read movements" on public.movements;
 create policy "members can read movements" on public.movements
 for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert movements" on public.movements;
 create policy "writers can insert movements" on public.movements
 for insert to authenticated with check (public.can_write_org(organization_id));
+grant usage on schema public to authenticated;
 
-create index if not exists suppliers_org_idx on public.suppliers(organization_id);
-create index if not exists tags_org_idx on public.tags(organization_id);
-create index if not exists products_org_idx on public.products(organization_id);
-create index if not exists lots_product_idx on public.lots(product_id);
-create index if not exists lots_expiry_idx on public.lots(expires_at);
-create index if not exists movements_org_date_idx on public.movements(organization_id, date desc);
+grant select on public.organizations to authenticated;
+grant select on public.organization_members to authenticated;
 
+grant select, insert, update on public.suppliers to authenticated;
+grant select, insert, update on public.tags to authenticated;
+grant select, insert, update on public.locations to authenticated;
+grant select, insert, update on public.product_types to authenticated;
+grant select, insert, update on public.categories to authenticated;
+grant select, insert, update on public.subcategories to authenticated;
+grant select, insert, update on public.products to authenticated;
+grant select, insert, delete on public.product_tags to authenticated;
+grant select, insert, update on public.lots to authenticated;
+grant select, insert on public.movements to authenticated;
+
+grant execute on function public.is_org_member(uuid) to authenticated;
+grant execute on function public.can_write_org(uuid) to authenticated;
 grant execute on function public.create_organization(text) to authenticated;
 grant execute on function public.register_inventory_movement(uuid, uuid, uuid, text, integer, text, text, text, date) to authenticated;
