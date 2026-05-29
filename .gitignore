@@ -10,3 +10,5 @@ public/sql-wasm-browser.wasm
 .vercel-cache
 .vercel-config
 dist/.vercel
+.gh-config
+.tools
