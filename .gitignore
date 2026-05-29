@@ -1,0 +1,12 @@
+node_modules
+dist
+.npm-cache
+.env
+.env.local
+.env.*.local
+public/sql-wasm-browser.wasm
+.vercel
+.vercel-data
+.vercel-cache
+.vercel-config
+dist/.vercel
