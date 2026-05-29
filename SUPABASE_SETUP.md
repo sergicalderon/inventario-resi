@@ -21,9 +21,15 @@ Esto crea:
 - función para crear la primera residencia,
 - función transaccional para registrar movimientos y actualizar stock.
 
-## 2. Crear usuario
+## 2. Crear usuarios privados
 
-Puedes crear el primer usuario desde la propia app con **Crear primera cuenta**.
+Esta app está pensada para uso privado. No dejes el registro público abierto.
+
+En Supabase:
+
+1. Ve a **Authentication** -> **Sign In / Providers** -> **Email**.
+2. Desactiva la opción para permitir nuevas altas de usuarios.
+3. Crea o invita usuarios manualmente desde **Authentication** -> **Users**.
 
 Si Supabase tiene confirmación de email activada, revisa el correo antes de iniciar sesión.
 
@@ -46,7 +52,7 @@ npm run dev
 
 Al entrar:
 
-1. crea o inicia sesión con un usuario,
+1. inicia sesión con un usuario creado o invitado en Supabase,
 2. crea la residencia,
 3. empieza a añadir proveedores, productos, lotes y movimientos.
 
