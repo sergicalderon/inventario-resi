@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Inventario sanitario">
+  <rect width="64" height="64" rx="12" fill="#f8fafc"/>
+  <path d="M13 23.5 32 13l19 10.5v21L32 55 13 44.5z" fill="#ffffff" stroke="#0f766e" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M13 23.5 32 34l19-10.5M32 34v21" fill="none" stroke="#0f766e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M29 23h6v6h6v6h-6v6h-6v-6h-6v-6h6z" fill="#dc2626"/>
+</svg>
