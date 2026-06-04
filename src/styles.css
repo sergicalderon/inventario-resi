@@ -354,6 +354,24 @@ th {
   text-transform: uppercase;
 }
 
+.sort-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  font: inherit;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0;
+  text-transform: inherit;
+}
+
+.sort-header:hover,
+.sort-header.active {
+  color: #135d63;
+}
+
 td strong,
 td span {
   display: block;
