@@ -1,9 +1,11 @@
-import { Plus, Save } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Save } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Modal } from "../components/Modal";
 import { InventoryState, Lot } from "../types";
 import { daysUntil, expiryWindow, todayIso } from "../utils/dates";
 import { productName, supplierName } from "../utils/inventory";
+
+type SortMode = "expiry-asc" | "expiry-desc" | "product-asc" | "product-desc";
 
 export const Lots = ({
   state,
@@ -15,7 +17,39 @@ export const Lots = ({
   onStatus: (lotId: string, status: Lot["status"]) => void;
 }) => {
   const [editing, setEditing] = useState<Lot | null>(null);
-  const sorted = useMemo(() => [...state.lots].sort((a, b) => daysUntil(a.expiresAt) - daysUntil(b.expiresAt)), [state.lots]);
+  const [sortMode, setSortMode] = useState<SortMode>("expiry-asc");
+  const productNames = useMemo(() => new Map(state.products.map((product) => [product.id, product.name])), [state.products]);
+  const sorted = useMemo(() => {
+    const collator = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+    const getProductName = (lot: Lot) => productNames.get(lot.productId) || "Producto eliminado";
+    const compareNames = (a: string, b: string) => collator.compare(a, b);
+    const compareLots = (a: Lot, b: Lot) => compareNames(a.lotCode, b.lotCode);
+    const compareExpiry = (a: Lot, b: Lot, direction: "asc" | "desc" = "asc") => {
+      const aTime = expiryTime(a.expiresAt);
+      const bTime = expiryTime(b.expiresAt);
+      const aMissing = aTime === null;
+      const bMissing = bTime === null;
+
+      if (aMissing && bMissing) return compareLots(a, b);
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
+      const expiryComparison = direction === "asc" ? aTime - bTime : bTime - aTime;
+      return expiryComparison || compareNames(getProductName(a), getProductName(b)) || compareLots(a, b);
+    };
+
+    return [...state.lots].sort((a, b) => {
+      if (sortMode === "expiry-asc") return compareExpiry(a, b, "asc");
+      if (sortMode === "expiry-desc") return compareExpiry(a, b, "desc");
+
+      const nameComparison = compareNames(getProductName(a), getProductName(b));
+      if (nameComparison) return sortMode === "product-asc" ? nameComparison : -nameComparison;
+      return compareExpiry(a, b, "asc");
+    });
+  }, [productNames, sortMode, state.lots]);
+
+  const toggleProductSort = () => setSortMode((current) => (current === "product-asc" ? "product-desc" : "product-asc"));
+  const toggleExpirySort = () => setSortMode((current) => (current === "expiry-asc" ? "expiry-desc" : "expiry-asc"));
 
   return (
     <div className="view">
@@ -33,9 +67,21 @@ export const Lots = ({
           <table>
             <thead>
               <tr>
-                <th>Producto</th>
+                <th>
+                  <button className={`sort-header ${sortMode.startsWith("product") ? "active" : ""}`} onClick={toggleProductSort} type="button">
+                    Producto
+                    {sortMode === "product-asc" && <ChevronUp size={14} aria-hidden="true" />}
+                    {sortMode === "product-desc" && <ChevronDown size={14} aria-hidden="true" />}
+                  </button>
+                </th>
                 <th>Lote</th>
-                <th>Caducidad</th>
+                <th>
+                  <button className={`sort-header ${sortMode.startsWith("expiry") ? "active" : ""}`} onClick={toggleExpirySort} type="button">
+                    Caducidad
+                    {sortMode === "expiry-asc" && <ChevronUp size={14} aria-hidden="true" />}
+                    {sortMode === "expiry-desc" && <ChevronDown size={14} aria-hidden="true" />}
+                  </button>
+                </th>
                 <th>Cantidad</th>
                 <th>Entrada</th>
                 <th>Proveedor</th>
@@ -45,12 +91,21 @@ export const Lots = ({
             </thead>
             <tbody>
               {sorted.map((lot) => {
-                const days = daysUntil(lot.expiresAt);
+                const hasExpiry = Boolean(lot.expiresAt);
+                const days = hasExpiry ? daysUntil(lot.expiresAt) : null;
                 return (
                   <tr key={lot.id}>
                     <td>{productName(state, lot.productId)}</td>
                     <td><strong>{lot.lotCode}</strong><span>{lot.notes}</span></td>
-                    <td><span className={`pill ${days <= 30 ? "danger" : days <= 90 ? "warning" : ""}`}>{lot.expiresAt} · {expiryWindow(lot.expiresAt) || `${days} días`}</span></td>
+                    <td>
+                      {hasExpiry ? (
+                        <span className={`pill ${days !== null && days <= 30 ? "danger" : days !== null && days <= 90 ? "warning" : ""}`}>
+                          {lot.expiresAt} · {expiryWindow(lot.expiresAt) || `${days} días`}
+                        </span>
+                      ) : (
+                        <span className="pill">Sin fecha</span>
+                      )}
+                    </td>
                     <td>{lot.currentQuantity}</td>
                     <td>{lot.entryDate}</td>
                     <td>{lot.supplierId ? supplierName(state, lot.supplierId) : "Sin proveedor"}</td>
@@ -80,6 +135,12 @@ export const Lots = ({
       )}
     </div>
   );
+};
+
+const expiryTime = (date: string) => {
+  if (!date) return null;
+  const time = new Date(`${date}T00:00:00`).getTime();
+  return Number.isNaN(time) ? null : time;
 };
 
 const blankLot = (productId: string, supplierId: string): Lot => ({
