@@ -135,5 +135,6 @@ export const seedState: InventoryState = {
       responsible: "Enfermería turno mañana",
       notes: ""
     }
-  ]
+  ],
+  recentActivity: []
 };

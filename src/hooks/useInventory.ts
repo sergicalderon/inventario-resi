@@ -22,6 +22,7 @@ const emptyState: InventoryState = {
   products: [],
   lots: [],
   movements: [],
+  recentActivity: [],
   suppliers: [],
   tags: [],
   locations: [],

@@ -1,4 +1,4 @@
-import { Boxes, DatabaseBackup, Gauge, Package, Settings2, Tags, Truck, Warehouse } from "lucide-react";
+import { Boxes, Clock3, DatabaseBackup, Gauge, Package, Settings2, Tags, Truck, Warehouse } from "lucide-react";
 import { Organization } from "../db/supabaseStorage";
 
 type Props = {
@@ -16,6 +16,7 @@ const items = [
   { id: "products", label: "Productos", icon: Package },
   { id: "lots", label: "Lotes", icon: Boxes },
   { id: "movements", label: "Movimientos", icon: Warehouse },
+  { id: "activity", label: "Actividad reciente", icon: Clock3 },
   { id: "suppliers", label: "Proveedores", icon: Truck },
   { id: "tags", label: "Etiquetas", icon: Tags },
   { id: "catalogs", label: "Catálogos", icon: Settings2 },

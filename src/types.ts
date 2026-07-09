@@ -79,10 +79,28 @@ export type Movement = {
   notes: string;
 };
 
+export type RecentActivity = {
+  id: string;
+  occurredAt: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  productId: string;
+  productName: string;
+  lotId: string;
+  lotCode: string;
+  actorUserId: string;
+  actorEmail: string;
+  quantity: number | null;
+  notes: string;
+};
+
 export type InventoryState = {
   products: Product[];
   lots: Lot[];
   movements: Movement[];
+  recentActivity: RecentActivity[];
   suppliers: Supplier[];
   tags: Tag[];
   locations: InventoryLocation[];

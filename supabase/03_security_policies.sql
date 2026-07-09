@@ -10,6 +10,7 @@ alter table public.products enable row level security;
 alter table public.product_tags enable row level security;
 alter table public.lots enable row level security;
 alter table public.movements enable row level security;
+alter table public.activity_events enable row level security;
 
 drop policy if exists "members can read organizations" on public.organizations;
 create policy "members can read organizations" on public.organizations
@@ -133,4 +134,12 @@ for select to authenticated using (public.is_org_member(organization_id));
 
 drop policy if exists "writers can insert movements" on public.movements;
 create policy "writers can insert movements" on public.movements
+for insert to authenticated with check (public.can_write_org(organization_id));
+
+drop policy if exists "members can read activity events" on public.activity_events;
+create policy "members can read activity events" on public.activity_events
+for select to authenticated using (public.is_org_member(organization_id));
+
+drop policy if exists "writers can insert activity events" on public.activity_events;
+create policy "writers can insert activity events" on public.activity_events
 for insert to authenticated with check (public.can_write_org(organization_id));

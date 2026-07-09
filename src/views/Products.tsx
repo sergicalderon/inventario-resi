@@ -1,5 +1,5 @@
 import { Plus, Save, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "../components/Modal";
 import { InventoryState, Product, ProductType, UnitType } from "../types";
 import { productStock, supplierName, tagNames } from "../utils/inventory";
@@ -15,10 +15,27 @@ const toLegacyProductType = (name: string): ProductType => {
 
 const catalogName = <T extends { id: string; name: string }>(items: T[], id: string, fallback = "") => items.find((item) => item.id === id)?.name || fallback;
 
-export const Products = ({ state, onSave }: { state: InventoryState; onSave: (product: Product) => void }) => {
+export const Products = ({
+  state,
+  onSave,
+  openProductId,
+  onProductOpened
+}: {
+  state: InventoryState;
+  onSave: (product: Product) => void;
+  openProductId?: string;
+  onProductOpened?: () => void;
+}) => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ type: "", category: "", supplier: "", location: "", tag: "" });
+
+  useEffect(() => {
+    if (!openProductId) return;
+    const product = state.products.find((item) => item.id === openProductId);
+    if (product) setEditing(product);
+    onProductOpened?.();
+  }, [onProductOpened, openProductId, state.products]);
 
   const filtered = useMemo(
     () =>
