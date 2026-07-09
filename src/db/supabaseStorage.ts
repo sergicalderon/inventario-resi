@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { Category, InventoryLocation, InventoryState, Lot, Movement, Product, ProductType, ProductTypeCatalog, Subcategory, Supplier, Tag } from "../types";
+import { Category, InventoryLocation, InventoryState, Lot, Movement, Product, ProductType, ProductTypeCatalog, RecentActivity, Subcategory, Supplier, Tag } from "../types";
 import { todayIso } from "../utils/dates";
 
 export type Organization = {
@@ -69,6 +69,23 @@ type MovementRow = {
   notes: string;
 };
 
+type RecentActivityRow = {
+  id: string;
+  occurred_at: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  product_id: string | null;
+  product_name: string | null;
+  lot_id: string | null;
+  lot_code: string | null;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  quantity: number | null;
+  notes: string | null;
+};
+
 const cleanId = (value: string) => value || crypto.randomUUID();
 const nullable = (value: string) => value || null;
 const cleanName = (value: string) => value.trim();
@@ -106,7 +123,8 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
     productsResult,
     productTagsResult,
     lotsResult,
-    movementsResult
+    movementsResult,
+    recentActivityResult
   ] = await Promise.all([
     supabase.from("suppliers").select("id, name, contact, phone, email, notes").eq("organization_id", organizationId).order("name"),
     supabase.from("tags").select("id, name").eq("organization_id", organizationId).order("name"),
@@ -131,7 +149,11 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
       .select("id, date, product_id, lot_id, type, quantity, reason, responsible, notes")
       .eq("organization_id", organizationId)
       .order("date", { ascending: false })
-      .limit(500)
+      .limit(500),
+    supabase.rpc("recent_activity", {
+      target_organization_id: organizationId,
+      result_limit: 50
+    })
   ]);
 
   const error =
@@ -144,7 +166,8 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
     productsResult.error ||
     productTagsResult.error ||
     lotsResult.error ||
-    movementsResult.error;
+    movementsResult.error ||
+    recentActivityResult.error;
   if (error) throw error;
 
   const productTags = (productTagsResult.data || []) as ProductTagRow[];
@@ -191,6 +214,23 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
     notes: movement.notes
   }));
 
+  const recentActivity = ((recentActivityResult.data || []) as RecentActivityRow[]).map((activity) => ({
+    id: activity.id,
+    occurredAt: activity.occurred_at,
+    action: activity.action,
+    entityType: activity.entity_type,
+    entityId: activity.entity_id || "",
+    entityName: activity.entity_name || "",
+    productId: activity.product_id || "",
+    productName: activity.product_name || "",
+    lotId: activity.lot_id || "",
+    lotCode: activity.lot_code || "",
+    actorUserId: activity.actor_user_id || "",
+    actorEmail: activity.actor_email || "",
+    quantity: activity.quantity,
+    notes: activity.notes || ""
+  }));
+
   return {
     suppliers: (suppliersResult.data || []) as Supplier[],
     tags: (tagsResult.data || []) as Tag[],
@@ -212,7 +252,8 @@ export const getState = async (organizationId: string): Promise<InventoryState> 
     })),
     products,
     lots,
-    movements
+    movements,
+    recentActivity
   };
 };
 

@@ -11,11 +11,13 @@ import { ImportExport } from "./views/ImportExport";
 import { Lots } from "./views/Lots";
 import { Movements } from "./views/Movements";
 import { Products } from "./views/Products";
+import { RecentActivity } from "./views/RecentActivity";
 import { Suppliers } from "./views/Suppliers";
 import { Tags } from "./views/Tags";
 
 export default function App() {
   const [view, setView] = useState("dashboard");
+  const [openProductId, setOpenProductId] = useState("");
   const { session, ready: authReady } = useAuth();
   const { state, ready, error, organizations, organizationId, actions } = useInventory(Boolean(session));
 
@@ -38,9 +40,18 @@ export default function App() {
       />
       <main className="content">
         {view === "dashboard" && <Dashboard state={state} />}
-        {view === "products" && <Products state={state} onSave={actions.saveProduct} />}
+        {view === "products" && <Products state={state} onSave={actions.saveProduct} openProductId={openProductId} onProductOpened={() => setOpenProductId("")} />}
         {view === "lots" && <Lots state={state} onSave={actions.saveLot} onStatus={actions.updateLotStatus} />}
         {view === "movements" && <Movements state={state} onRegister={actions.registerMovement} />}
+        {view === "activity" && (
+          <RecentActivity
+            state={state}
+            onOpenProduct={(productId) => {
+              setOpenProductId(productId);
+              setView("products");
+            }}
+          />
+        )}
         {view === "suppliers" && <Suppliers state={state} onSave={actions.saveSupplier} />}
         {view === "tags" && <Tags state={state} onSave={actions.saveTag} />}
         {view === "catalogs" && (

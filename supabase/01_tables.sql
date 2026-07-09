@@ -133,6 +133,23 @@ create table if not exists public.movements (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.activity_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  action text not null,
+  entity_type text not null,
+  entity_id uuid,
+  entity_name text not null default '',
+  product_id uuid references public.products(id) on delete set null,
+  product_name text not null default '',
+  lot_id uuid references public.lots(id) on delete set null,
+  lot_code text not null default '',
+  actor_user_id uuid references auth.users(id) on delete set null,
+  actor_email text,
+  metadata jsonb not null default '{}'::jsonb
+);
+
 create index if not exists suppliers_org_idx on public.suppliers(organization_id);
 create index if not exists tags_org_idx on public.tags(organization_id);
 create index if not exists locations_org_idx on public.locations(organization_id);
@@ -149,6 +166,10 @@ create index if not exists products_subcategory_idx on public.products(subcatego
 create index if not exists lots_product_idx on public.lots(product_id);
 create index if not exists lots_expiry_idx on public.lots(expires_at);
 create index if not exists movements_org_date_idx on public.movements(organization_id, date desc);
+create index if not exists activity_events_org_created_idx on public.activity_events(organization_id, created_at desc);
+create index if not exists activity_events_product_idx on public.activity_events(product_id);
+create index if not exists activity_events_lot_idx on public.activity_events(lot_id);
+create index if not exists activity_events_action_idx on public.activity_events(action);
 
 create unique index if not exists locations_org_name_unique on public.locations(organization_id, lower(name));
 create unique index if not exists product_types_org_name_unique on public.product_types(organization_id, lower(name));
